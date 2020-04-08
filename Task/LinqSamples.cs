@@ -170,7 +170,7 @@ namespace SampleQueries
             var cities = dataSource.Suppliers.GroupJoin(dataSource.Customers,
                 s => new { s.City, s.Country },
                 c => new { c.City, c.Country },
-                (s, c) => new { Supplier = s, Customers = c });
+                (s, c) => new { Supplier = s, Customers = c }).Where(x => x.Customers.Any()).OrderBy(x => x.Supplier.City);
             foreach (var city in cities)
             {
                 Console.WriteLine(String.Format("{0}", city.Supplier.City));
@@ -252,7 +252,7 @@ namespace SampleQueries
                 {
                     Name = c.CompanyName,
                     Date = c.Orders.OrderBy(o => o.OrderDate).Select(o => o.OrderDate).First()
-                });
+                }).OrderBy(x => x.Date);
 
             foreach (var client in customers)
             {
@@ -269,8 +269,9 @@ namespace SampleQueries
             var customers =
                 from client in dataSource.Customers
                 from order in client.Orders
-                orderby order.OrderDate descending, client.Orders.Sum(o => o.Total) descending, client.CompanyName
+                orderby order.OrderDate descending
                 group new { Client = client.CompanyName, Date = order.OrderDate, Sum = client.Orders.Sum(o => o.Total) } by client.CompanyName into groupped
+                orderby groupped.AsEnumerable().Last().Date.Year, groupped.AsEnumerable().Last().Date.Month,groupped.AsEnumerable().Last().Sum descending, groupped.Key
                 select new
                 {
                     Name = groupped.Key,
@@ -294,10 +295,10 @@ namespace SampleQueries
                     Name = c.CompanyName,
                     Date = c.Orders.OrderBy(o => o.OrderDate).Select(o => o.OrderDate).First(),
                     Sum = c.Orders.Sum(o => o.Total)
-                }).OrderByDescending(c => c.Date.Year)
-                .ThenByDescending(c => c.Date.Month)
+                }).OrderBy(c => c.Date.Year)
+                .ThenBy(c => c.Date.Month)
                 .ThenByDescending(c => c.Sum)
-                .ThenByDescending(c => c.Name);
+                .ThenBy(c => c.Name);
 
 
             foreach (var client in customers)
@@ -357,6 +358,7 @@ namespace SampleQueries
                 from product in dataSource.Products
                 orderby product.UnitPrice
                 group new { product.Category, InStock = product.UnitsInStock > 0 ? "In stock" : "Out of stock", product.ProductName, product.UnitPrice } by new { product.Category, IsInStock = product.UnitsInStock > 0 } into groupped
+                orderby groupped.Key.Category
                 from grouppedProduct in groupped
                 select new
                 {
@@ -436,14 +438,13 @@ namespace SampleQueries
             var cheap = 30;
             var normal = 100;
             var products = dataSource.Products
-                .GroupBy(p => p.UnitPrice < cheap ? "Cheap"
-                    : p.UnitPrice < normal ? "Normal" : "Expensive");
+                .GroupBy(p => p.UnitPrice > cheap ? (p.UnitPrice > normal ? "Expensive" : "Normal") : "Cheap");
 
             foreach (var group in products)
             {
                 foreach (var product in group)
                 {
-                    Console.WriteLine(String.Format("{0}\t:{1}", product.ProductName, product.UnitPrice));
+                    Console.WriteLine(String.Format("{0}\t:{1}", product.ProductName, group.Key));
                 }
             }
         }
@@ -455,13 +456,12 @@ namespace SampleQueries
         {
             var cities =
                 from customer in dataSource.Customers
-                from order in customer.Orders
-                group new { order, count = customer.Orders.Count() } by customer.City into orders
+                group new { customer, count = customer.Orders.Count() } by customer.City into orders
                 select new
                 {
                     orders.Key,
-                    Average = orders.Average(x => x.order.Total),
-                    Intensity = orders.Average(x => x.count)
+                    Average = orders.Average(x => x.customer.Orders.Average(o => o?.Total)),
+                    Intensity = orders.Average(x => x.customer.Orders.Length)
                 };
             foreach (var city in cities)
             {
